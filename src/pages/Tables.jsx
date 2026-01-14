@@ -72,16 +72,16 @@ const Tables = () => {
     const area = tableAreas.find(a => a.id === table.table_area_id);
     
     // Masa durumu: shopcart varsa occupied, yoksa empty
-    const actualStatus = table.active_shopcart ? 'occupied' : 'empty';
+    const actualStatus = table.active_shopcart_items ? 'occupied' : 'empty';
     
     // Açılma süresi (dakika)
-    const duration = table.active_shopcart?.created_at 
-      ? Math.floor((Date.now() - new Date(table.active_shopcart.created_at).getTime()) / 60000)
+    const duration = table.active_shopcart_items?.created_at 
+      ? Math.floor((Date.now() - new Date(table.active_shopcart_items.created_at).getTime()) / 60000)
       : null;
     
     // Toplam tutar
-    const total = table.active_shopcart?.total_amount 
-      ? parseFloat(table.active_shopcart.total_amount)
+    const total = table.active_shopcart_items?.total_amount 
+      ? parseFloat(table.active_shopcart_items.total_amount)
       : 0;
     
     return {

@@ -4,12 +4,12 @@ import { getProducts, getProductCategories } from '../api/products';
 import { addToShopcart } from '../api/shopcart';
 import { getImageUrl } from '../utils/imageHelper';
 
-const AddProductModal = ({ isOpen, onClose, tableId, onSuccess }) => {
+const AddProductModal = ({ isOpen, onClose, tableId, tableName, onSuccess }) => {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedProducts, setSelectedProducts] = useState([]); // [{ product_id, note, product }]
+  const [selectedProducts, setSelectedProducts] = useState([]); // [{ product_id, quantity, note, product }]
   const [loading, setLoading] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
 
@@ -56,19 +56,48 @@ const AddProductModal = ({ isOpen, onClose, tableId, onSuccess }) => {
     return matchesCategory && matchesSearch && product.status === 'active';
   });
 
-  const toggleProduct = (product) => {
+  const addProduct = (product) => {
     const exists = selectedProducts.find(p => p.product_id === product.id);
     if (exists) {
-      setSelectedProducts(prev => prev.filter(p => p.product_id !== product.id));
+      setSelectedProducts(prev => 
+        prev.map(p => p.product_id === product.id ? { ...p, quantity: p.quantity + 1 } : p)
+      );
     } else {
-      setSelectedProducts(prev => [...prev, { product_id: product.id, note: '', product }]);
+      setSelectedProducts(prev => [...prev, { product_id: product.id, quantity: 1, note: '', product }]);
     }
+  };
+
+  const decreaseProduct = (product) => {
+    const exists = selectedProducts.find(p => p.product_id === product.id);
+    if (exists && exists.quantity > 1) {
+      setSelectedProducts(prev => 
+        prev.map(p => p.product_id === product.id ? { ...p, quantity: p.quantity - 1 } : p)
+      );
+    } else {
+      setSelectedProducts(prev => prev.filter(p => p.product_id !== product.id));
+    }
+  };
+
+  const removeProduct = (productId) => {
+    setSelectedProducts(prev => prev.filter(p => p.product_id !== productId));
   };
 
   const updateNote = (productId, note) => {
     setSelectedProducts(prev => 
       prev.map(p => p.product_id === productId ? { ...p, note } : p)
     );
+  };
+
+  const getTotalAmount = () => {
+    return selectedProducts.reduce((total, item) => {
+      return total + (item.product.price * item.quantity);
+    }, 0);
+  };
+
+  const getTotalItems = () => {
+    return selectedProducts.reduce((total, item) => {
+      return total + item.quantity;
+    }, 0);
   };
 
   const handleSubmit = async () => {
@@ -79,10 +108,13 @@ const AddProductModal = ({ isOpen, onClose, tableId, onSuccess }) => {
 
     setLoading(true);
     try {
-      const items = selectedProducts.map(p => ({
-        product_id: p.product_id,
-        note: p.note || undefined
-      }));
+      const items = selectedProducts.flatMap(p => {
+        // Her bir quantity için ayrı item oluştur
+        return Array(p.quantity).fill(null).map(() => ({
+          product_id: p.product_id,
+          note: p.note || undefined
+        }));
+      });
 
       const result = await addToShopcart({
         table_id: tableId,
@@ -108,102 +140,181 @@ const AddProductModal = ({ isOpen, onClose, tableId, onSuccess }) => {
 
   if (!isOpen) return null;
 
+  const totalAmount = getTotalAmount();
+  const totalItems = getTotalItems();
+
   return (
     <div 
-      className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
       style={{ animation: 'fadeIn 0.2s ease-out' }}
       onClick={handleClose}
     >
       <div 
-        className="bg-white dark:bg-[#1a2632] w-full max-w-4xl rounded-xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
+        className="relative w-full max-w-[1200px] h-[90vh] flex flex-col bg-white dark:bg-slate-900 rounded-xl shadow-2xl overflow-hidden"
         style={{ animation: 'slideUp 0.3s ease-out' }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <div className="p-6 border-b border-[#e7edf3] dark:border-slate-800">
-          <div className="flex items-center justify-between mb-4">
+        {/* Header Section */}
+        <div className="flex-none bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 z-10">
+          {/* Title & Close */}
+          <div className="px-4 py-3 flex items-center justify-between">
             <div>
-              <h3 className="text-lg font-bold">Ürün Ekle</h3>
-              <p className="text-sm text-[#4c739a] mt-1">Sepete eklemek istediğiniz ürünleri seçin</p>
+              <h1 className="text-lg font-bold text-slate-900 dark:text-white">
+                {tableName || `Masa ${tableId}`} - Ürün Ekle
+              </h1>
+              <p className="text-slate-500 dark:text-slate-400 text-xs mt-0.5">
+                Sipariş oluşturmak için listeden ürün seçin
+              </p>
             </div>
             <button
               onClick={handleClose}
               disabled={loading}
-              className="text-[#4c739a] hover:text-red-500 transition-colors"
+              className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50"
             >
-              <span className="material-symbols-outlined">close</span>
+              <span className="material-symbols-outlined text-[20px]">close</span>
             </button>
           </div>
 
-          {/* Filters */}
-          <div className="flex gap-3">
-            <div className="flex-1">
+          {/* Search & Filters */}
+          <div className="px-4 pb-3 flex flex-col gap-3">
+            {/* Search Bar */}
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-slate-400">
+                <span className="material-symbols-outlined text-[18px]">search</span>
+              </div>
               <input
                 type="text"
-                placeholder="Ürün ara..."
+                placeholder="Ürün adı veya kodu ile ara..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full px-4 py-2 bg-[#f0f2f5] dark:bg-slate-800 border-none rounded-lg text-sm focus:ring-1 focus:ring-primary outline-none"
+                autoFocus
+                className="w-full h-9 pl-9 pr-3 rounded-lg bg-slate-100 dark:bg-slate-800 border-none text-sm text-slate-900 dark:text-white placeholder-slate-500 focus:ring-2 focus:ring-primary focus:bg-white dark:focus:bg-slate-900 transition-all outline-none"
               />
             </div>
-            <select
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
-              className="px-4 py-2 bg-[#f0f2f5] dark:bg-slate-800 border-none rounded-lg text-sm focus:ring-1 focus:ring-primary outline-none"
-            >
-              <option value="all">Tüm Kategoriler</option>
+
+            {/* Chips / Categories */}
+            <div className="flex gap-2 overflow-x-auto scrollbar-hide items-center -mx-4 px-4">
+              <button
+                onClick={() => setSelectedCategory('all')}
+                className={`px-3 h-8 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
+                  selectedCategory === 'all'
+                    ? 'bg-primary text-white shadow-md shadow-primary/20'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                }`}
+              >
+                Tümü
+              </button>
               {categories.map(category => (
-                <option key={category.id} value={category.id}>
+                <button
+                  key={category.id}
+                  onClick={() => setSelectedCategory(category.id.toString())}
+                  className={`px-3 h-8 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
+                    selectedCategory === category.id.toString()
+                      ? 'bg-primary text-white shadow-md shadow-primary/20'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                  }`}
+                >
                   {category.name}
-                </option>
+                </button>
               ))}
-            </select>
+            </div>
           </div>
         </div>
 
-        {/* Content - Scrollable */}
-        <div className="flex-1 overflow-y-auto p-6">
+        {/* Scrollable Content Area */}
+        <div className="flex-1 overflow-y-auto bg-background-light dark:bg-background-dark p-4">
           {loadingData ? (
-            <div className="flex items-center justify-center py-12">
+            <div className="flex items-center justify-center py-8">
               <span className="material-symbols-outlined text-4xl text-primary animate-spin">progress_activity</span>
             </div>
           ) : filteredProducts.length === 0 ? (
-            <div className="text-center py-12 text-[#4c739a]">
+            <div className="text-center py-8 text-slate-500 dark:text-slate-400">
               <span className="material-symbols-outlined text-5xl mb-2">search_off</span>
-              <p>Ürün bulunamadı</p>
+              <p className="text-sm font-medium">Ürün bulunamadı</p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
               {filteredProducts.map(product => {
-                const isSelected = selectedProducts.find(p => p.product_id === product.id);
+                const selectedItem = selectedProducts.find(p => p.product_id === product.id);
+                const isSelected = !!selectedItem;
+                
                 return (
                   <div
                     key={product.id}
-                    onClick={() => toggleProduct(product)}
-                    className={`relative cursor-pointer rounded-lg border-2 transition-all ${
+                    className={`group relative flex flex-col bg-white dark:bg-slate-800 rounded-lg shadow-sm overflow-hidden cursor-pointer transition-all hover:shadow-md ${
                       isSelected 
-                        ? 'border-primary bg-primary/5' 
-                        : 'border-slate-200 dark:border-slate-700 hover:border-primary/50'
+                        ? 'border-2 border-primary' 
+                        : 'border border-transparent hover:border-primary/50'
                     }`}
                   >
-                    <div className="p-3">
-                      {product.image && (
-                        <div className="w-full h-32 rounded-lg overflow-hidden mb-2 bg-slate-100 dark:bg-slate-800">
-                          <img 
-                            src={getImageUrl(product.image)} 
-                            alt={product.name}
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                      )}
-                      <h4 className="font-semibold text-sm mb-1 line-clamp-1">{product.name}</h4>
-                      <p className="text-xs text-[#4c739a] mb-2 line-clamp-2">{product.description}</p>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-bold text-primary">₺{product.price}</span>
-                        {isSelected && (
-                          <span className="material-symbols-outlined text-primary text-xl">check_circle</span>
-                        )}
+                    {/* Quantity Badge */}
+                    {isSelected && (
+                      <div className="absolute top-1.5 right-1.5 z-10">
+                        <span className="w-5 h-5 flex items-center justify-center bg-primary text-white rounded-full text-[10px] font-bold">
+                          {selectedItem.quantity}
+                        </span>
                       </div>
+                    )}
+
+                    {/* Product Image */}
+                    <div 
+                      className="h-24 w-full bg-cover bg-center"
+                      style={{ 
+                        backgroundImage: product.image 
+                          ? `url(${getImageUrl(product.image)})` 
+                          : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+                      }}
+                    />
+
+                    {/* Product Info */}
+                    <div className="p-2 flex flex-col flex-1">
+                      <h3 className="text-slate-900 dark:text-white font-semibold text-sm leading-tight line-clamp-2 min-h-[2.5rem]">
+                        {product.name}
+                      </h3>
+                      <p className={`font-bold text-xs mt-1 ${isSelected ? 'text-primary' : 'text-slate-500 dark:text-slate-400'}`}>
+                        {parseFloat(product.price).toFixed(2)} ₺
+                      </p>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="mt-auto p-2 pt-0">
+                      {isSelected ? (
+                        <div className="flex items-center gap-1">
+                          <div className="flex items-center justify-between w-full bg-slate-100 dark:bg-slate-900 rounded-md p-0.5">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                decreaseProduct(product);
+                              }}
+                              className="w-6 h-6 flex items-center justify-center rounded bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                            >
+                              <span className="material-symbols-outlined text-[16px]">remove</span>
+                            </button>
+                            <span className="text-xs font-bold text-slate-900 dark:text-white">
+                              {selectedItem.quantity}
+                            </span>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                addProduct(product);
+                              }}
+                              className="w-6 h-6 flex items-center justify-center rounded bg-primary text-white shadow-sm hover:bg-blue-600 transition-colors"
+                            >
+                              <span className="material-symbols-outlined text-[16px]">add</span>
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            addProduct(product);
+                          }}
+                          className="w-full py-1.5 rounded-md bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-300 font-medium text-xs hover:bg-primary hover:text-white transition-colors flex items-center justify-center gap-1 group-hover:bg-primary group-hover:text-white"
+                        >
+                          <span className="material-symbols-outlined text-[16px]">add</span> Ekle
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
@@ -212,71 +323,44 @@ const AddProductModal = ({ isOpen, onClose, tableId, onSuccess }) => {
           )}
         </div>
 
-        {/* Selected Products & Notes */}
-        {selectedProducts.length > 0 && (
-          <div className="p-6 border-t border-[#e7edf3] dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 max-h-48 overflow-y-auto">
-            <h4 className="text-sm font-semibold mb-3">Seçili Ürünler ({selectedProducts.length})</h4>
-            <div className="space-y-2">
-              {selectedProducts.map(item => (
-                <div key={item.product_id} className="bg-white dark:bg-[#1a2632] rounded-lg p-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="font-medium text-sm flex-1">{item.product.name}</span>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleProduct(item.product);
-                      }}
-                      className="text-red-500 hover:text-red-600"
-                    >
-                      <span className="material-symbols-outlined text-lg">close</span>
-                    </button>
-                  </div>
-                  <input
-                    type="text"
-                    placeholder="Not ekle (opsiyonel)"
-                    value={item.note}
-                    onChange={(e) => updateNote(item.product_id, e.target.value)}
-                    onClick={(e) => e.stopPropagation()}
-                    className="w-full px-3 py-1.5 bg-[#f0f2f5] dark:bg-slate-800 border-none rounded text-xs focus:ring-1 focus:ring-primary outline-none"
-                  />
-                </div>
-              ))}
+        {/* Footer / Action Bar */}
+        <div className="flex-none bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 p-3 md:px-4 shadow-[0_-5px_20px_rgba(0,0,0,0.05)]">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex flex-col">
+              <span className="text-xs text-slate-500 dark:text-slate-400">
+                Toplam Tutar ({totalItems} Ürün)
+              </span>
+              <span className="text-lg font-bold text-primary">
+                {totalAmount.toFixed(2)} ₺
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleClose}
+                disabled={loading}
+                className="hidden md:flex h-9 px-4 items-center justify-center rounded-lg border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-medium text-sm hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
+              >
+                İptal
+              </button>
+              <button
+                onClick={handleSubmit}
+                disabled={loading || selectedProducts.length === 0}
+                className="h-9 px-5 flex items-center justify-center gap-1.5 rounded-lg bg-primary text-white font-semibold text-sm hover:bg-blue-600 shadow-lg shadow-blue-500/30 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading ? (
+                  <>
+                    <span className="material-symbols-outlined text-[18px] animate-spin">progress_activity</span>
+                    <span>Ekleniyor...</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="material-symbols-outlined text-[18px]">shopping_cart</span>
+                    <span>Sepete Ekle</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
-        )}
-
-        {/* Footer */}
-        <div className="p-6 border-t border-[#e7edf3] dark:border-slate-800 flex gap-3">
-          <button
-            type="button"
-            onClick={handleClose}
-            disabled={loading}
-            className="flex-1 px-4 py-2 border border-[#e7edf3] dark:border-slate-700 text-[#4c739a] rounded-lg font-medium text-sm hover:bg-slate-50 dark:hover:bg-slate-800 transition-all disabled:opacity-50"
-          >
-            İptal
-          </button>
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={loading || selectedProducts.length === 0}
-            className="flex-1 bg-primary text-white py-2 rounded-lg font-medium hover:bg-primary/90 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-          >
-            {loading ? (
-              <>
-                <span className="material-symbols-outlined text-base animate-spin">progress_activity</span>
-                <span>Ekleniyor...</span>
-              </>
-            ) : (
-              <>
-                <span>Sepete Ekle</span>
-                {selectedProducts.length > 0 && (
-                  <span className="bg-white/20 px-2 py-0.5 rounded-full text-xs">
-                    {selectedProducts.length}
-                  </span>
-                )}
-              </>
-            )}
-          </button>
         </div>
       </div>
 
@@ -295,6 +379,13 @@ const AddProductModal = ({ isOpen, onClose, tableId, onSuccess }) => {
               opacity: 1;
               transform: translateY(0);
             }
+          }
+          .scrollbar-hide::-webkit-scrollbar {
+            display: none;
+          }
+          .scrollbar-hide {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
           }
         `}
       </style>

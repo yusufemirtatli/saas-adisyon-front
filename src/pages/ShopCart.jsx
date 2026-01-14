@@ -483,6 +483,7 @@ const ShopCart = () => {
         isOpen={showAddProductPopup}
         onClose={() => setShowAddProductPopup(false)}
         tableId={tableId}
+        tableName={tableData?.name}
         onSuccess={fetchTableData}
       />
     </Layout>
